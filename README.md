@@ -28,7 +28,7 @@ node tools/build-pokedex.mjs # refresh src/data/pokedex.js from pokemondb.net
 | `src/game/fielding.js` | Batted ball → play: catches/dives, ground balls, wiffle-slow throws, runner decisions, force/tag plays, DPs, tag-ups, errors. |
 | `src/game/ai.js` | CPU pitch selection by count; CPU batter reads (Eye), swing decisions and input errors. |
 | `src/game/game.js` | Game engine: counts, outs, innings, walk-offs, pitching changes, fatigue, box score, play-by-play. |
-| `viewer/game.html` | The game: team builder, scoreboard, sprites on the field, animated plays, human batting and pitching. |
+| `viewer/game.html` | The game (watch mode): team builder, scoreboard, sprites on the field, animated plays, play/pause and sim controls. The engine already accepts human pitch and swing input; the UI for it comes later. |
 | `viewer/index.html` | Physics lab: catcher view, side view, top-down field, live at-bats. |
 
 Units are SI internally; use the helpers in `src/units.js` at the edges.

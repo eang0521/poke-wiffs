@@ -1,6 +1,6 @@
 import {
   createField, createTeam, createPlayer, createGame, POKEDEX, getPokemon, spriteUrl, PITCHES,
-  batPose, mToFt, ftToM, createRng,
+  batPose, mToFt, createRng,
 } from '../src/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -38,8 +38,7 @@ const DEFAULTS = {
   away: { name: 'Pallet Town Pidgeys', roster: ['charizard', 'pikachu', 'machamp', 'alakazam', 'snorlax', 'gengar'] },
   home: { name: 'Cerulean Splash', roster: ['blastoise', 'gyarados', 'starmie', 'lapras', 'jolteon', 'scizor'] },
 };
-const setup = { away: { ...DEFAULTS.away, control: 'cpu' }, home: { ...DEFAULTS.home, control: 'cpu' } };
-setup.away.control = 'human';
+const setup = { away: { ...DEFAULTS.away }, home: { ...DEFAULTS.home } };
 
 const strongPool = POKEDEX.filter((p) => Object.values(p.stats).reduce((a, b) => a + b, 0) >= 450);
 const rng = createRng(Date.now() % 100000);
@@ -50,8 +49,6 @@ function renderSetup(side) {
   el.innerHTML = `
     <h2><span style="color:var(--${side})">●</span> ${side === 'away' ? 'Away' : 'Home'}</h2>
     <label class="small">Team name</label><input class="tname" value="${t.name}" style="width:100%">
-    <label class="small">Controlled by</label>
-    <select class="ctrl"><option value="cpu">CPU</option><option value="human">Human (bat + pitch)</option></select>
     <label class="small">Party (batting order is set automatically)</label>
     ${t.roster.map((slug, i) => {
       const m = getPokemon(slug);
@@ -62,9 +59,6 @@ function renderSetup(side) {
     }).join('')}
     <div class="team-actions"><button class="secondary rand">Random team</button></div>`;
   el.querySelector('.tname').addEventListener('input', (e) => (t.name = e.target.value));
-  const ctrl = el.querySelector('.ctrl');
-  ctrl.value = t.control;
-  ctrl.addEventListener('change', () => (t.control = ctrl.value));
   el.querySelectorAll('.slot input').forEach((inp) => inp.addEventListener('change', () => {
     const m = byName.get(inp.value.trim().toLowerCase());
     if (m) t.roster[Number(inp.dataset.i)] = m.slug;
@@ -81,22 +75,20 @@ SIDES.forEach(renderSetup);
 
 // ---------- game state ----------
 let game = null;
-let control = { away: 'cpu', home: 'cpu' };
-let busy = false;
-let lastEvent = null; // for the plate view after a pitch
-let humanPitch = { pitch: null, target: null };
+let busy = false; // a pitch or play is animating
+let playing = false; // auto-advance pitch after pitch
+let lastEvent = null;
 
 $('start').addEventListener('click', () => {
   for (const side of SIDES) if (new Set(setup[side].roster).size !== 6) return alert(`${setup[side].name}: pick 6 different Pokémon`);
   const away = createTeam(setup.away.name, setup.away.roster.map((s, i) => createPlayer(s, { uid: `a${i}` })));
   const home = createTeam(setup.home.name, setup.home.roster.map((s, i) => createPlayer(s, { uid: `h${i}` })));
-  control = { away: setup.away.control, home: setup.home.control };
   game = createGame({ away, home, field, rules: { innings: Number($('innings').value) }, seed: Math.floor(Math.random() * 1e9) });
   for (const t of [away, home]) t.players.forEach((p) => sprite(p.slug));
   $('setup').style.display = 'none';
   $('gameview').style.display = 'block';
   renderAll();
-  prepareTurn();
+  setPlaying(true);
 });
 
 // ---------- controls ----------
@@ -108,108 +100,77 @@ $('pitchSpeed').addEventListener('input', syncLbl);
 $('playSpeed').addEventListener('input', syncLbl);
 syncLbl();
 
-$('next').addEventListener('click', () => runPitch());
+$('play').addEventListener('click', () => setPlaying(!playing));
+$('next').addEventListener('click', () => { setPlaying(false); runPitch(); });
 $('simHalf').addEventListener('click', () => simUntil((s0, s) => s.half !== s0.half || s.inning !== s0.inning));
 $('simGame').addEventListener('click', () => simUntil(() => false));
 
+let queuedSim = null; // a sim requested while a play was animating
 function simUntil(stop) {
-  if (busy || game.state.over) return;
+  if (game.state.over) return;
+  setPlaying(false);
+  if (busy) {
+    queuedSim = stop;
+    return;
+  }
   const s0 = { half: game.state.half, inning: game.state.inning };
   let n = 0;
   while (!game.state.over && n++ < 3000) {
     lastEvent = game.step();
     if (stop(s0, game.state)) break;
   }
-  humanPitch = { pitch: null, target: null };
   renderAll();
   prepareTurn();
 }
 
-const humanBatting = () => control[game.situation().battingSide] === 'human';
-const humanPitching = () => control[game.situation().fieldingSide] === 'human';
-
-// The prompt shows the last pitch's result above the next instruction.
-function setPrompt(instruction) {
-  const last = lastEvent ? `<div>${lastEvent.text}${lastEvent.swing && humanBattingFor(lastEvent) ? ` <span style="color:var(--muted)">(${timingWord(lastEvent.swing.timingErrorMs)})</span>` : ''}</div>` : '';
-  $('prompt').innerHTML = last + (instruction ? `<div style="color:var(--muted);font-weight:500">${instruction}</div>` : '');
+function setPlaying(on) {
+  playing = on && !game.state.over;
+  $('play').textContent = playing ? '❚❚ Pause' : '▶ Play';
+  if (playing && !busy) runPitch();
 }
-const humanBattingFor = (ev) => !!ev.humanBat;
 
 function prepareTurn() {
   if (game.state.over) {
-    setPrompt(game.state.winner ? `<b>${game.teams[game.state.winner].name} win!</b>` : 'Tie game.');
-    $('next').disabled = true;
+    playing = false;
+    $('play').textContent = '▶ Play';
+    $('prompt').innerHTML = `${lastEvent ? `<div>${lastEvent.text}</div>` : ''}<div><b>${game.state.winner ? `${game.teams[game.state.winner].name} win!` : 'Tie game.'}</b></div>`;
+    for (const id of ['play', 'next', 'simHalf', 'simGame']) $(id).disabled = true;
     return;
   }
-  $('next').disabled = false;
-  $('humanBat').style.display = humanBatting() ? 'flex' : 'none';
-  if (humanPitching()) {
-    setPrompt(humanPitch.pitch ? 'Click the plate view to pick a target.' : 'Your pitch: choose one from your arsenal, then click a target.');
-    $('next').disabled = true;
-  } else if (humanBatting()) {
-    setPrompt('Your at-bat: press <b>Next pitch</b>, aim with the mouse, <kbd>Space</kbd> to swing.');
-  } else {
-    setPrompt('');
-    if ($('auto').checked) setTimeout(() => { if (!busy && !humanPitching() && !humanBatting()) runPitch(); }, 350);
-  }
+  $('prompt').textContent = lastEvent ? lastEvent.text : '';
   renderCards();
   drawIdle();
+  if (playing) setTimeout(() => { if (playing && !busy) runPitch(); }, 450 / Number($('playSpeed').value));
 }
 
 // ---------- one pitch ----------
-async function runPitch(choice) {
+async function runPitch() {
   if (busy || game.state.over) return;
   busy = true;
-  $('next').disabled = true;
   const before = game.situation();
-  const pitch = game.preparePitch(choice);
-  let ev;
-  const humanBat = humanBatting();
-  if (humanBat) {
-    ev = await animatePitchHuman(pitch);
-  } else {
-    ev = game.resolvePitch();
-    await animatePitch(pitch, ev);
-  }
-  ev.humanBat = humanBat;
+  const pitch = game.preparePitch();
+  const ev = game.resolvePitch();
+  await animatePitch(pitch, ev);
   lastEvent = ev;
+  $('prompt').textContent = ev.text;
   if (ev.play?.timeline && ev.play.timeline.end > 0) await animatePlay(ev, before);
-  humanPitch = { pitch: null, target: null };
   busy = false;
+  if (queuedSim) {
+    const stop = queuedSim;
+    queuedSim = null;
+    return simUntil(stop);
+  }
   renderAll();
   prepareTurn();
 }
 
 // ---------- plate view ----------
 const CAM = { y: field.zone.y - 2.4, z: field.zone.centerZ + 0.05, f: 480 };
-const contactDepth = 0.25;
-let mouseAim = null; // feet, at the contact plane
 const project = (p, W, H) => {
   const d = p.y - CAM.y;
   return [W / 2 + (CAM.f * p.x) / d, H * 0.52 - (CAM.f * (p.z - CAM.z)) / d, d];
 };
-const unproject = (e, planeY) => {
-  const c = $('plate');
-  const r = c.getBoundingClientRect();
-  const sx = ((e.clientX - r.left) / r.width) * c.width;
-  const sy = ((e.clientY - r.top) / r.height) * c.height;
-  const d = planeY - CAM.y;
-  return { x: mToFt(((sx - c.width / 2) * d) / CAM.f), z: mToFt(CAM.z - ((sy - c.height * 0.52) * d) / CAM.f) };
-};
-$('plate').addEventListener('mousemove', (e) => { mouseAim = unproject(e, contactDepth); if (!busy) drawPlate(); });
-$('plate').addEventListener('click', (e) => {
-  if (busy && humanSwingHandler) return humanSwingHandler();
-  if (!busy && game && humanPitching() && humanPitch.pitch) {
-    humanPitch.target = unproject(e, field.zone.y);
-    runPitch({ pitch: humanPitch.pitch, target: humanPitch.target });
-  }
-});
-let humanSwingHandler = null;
-addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && humanSwingHandler) { e.preventDefault(); humanSwingHandler(); }
-});
-
-function drawPlate(pitch = null, t = null, ev = null, aimFt = null) {
+function drawPlate(pitch = null, t = null, ev = null) {
   const c = $('plate');
   const g = c.getContext('2d');
   const W = c.width, H = c.height;
@@ -235,17 +196,6 @@ function drawPlate(pitch = null, t = null, ev = null, aimFt = null) {
     const size = (CAM.f * 1.3) / pd;
     const img = sprite(p.slug);
     if (img.complete && img.naturalWidth) g.drawImage(img, px - size / 2, py - size / 2, size, size);
-  }
-  // human pitch target
-  if (humanPitch.target && !pitch) {
-    const [tx, ty] = project({ x: ftToM(humanPitch.target.x), y: z.y, z: ftToM(humanPitch.target.z) }, W, H);
-    g.strokeStyle = css('--ink'); g.beginPath(); g.moveTo(tx - 7, ty); g.lineTo(tx + 7, ty); g.moveTo(tx, ty - 7); g.lineTo(tx, ty + 7); g.stroke();
-  }
-  // bat aim ring
-  const aim = aimFt ?? (game && humanBatting() ? mouseAim : null);
-  if (aim) {
-    const [ax, ay] = project({ x: ftToM(aim.x), y: contactDepth, z: ftToM(aim.z) }, W, H);
-    g.strokeStyle = '#f2c94c'; g.lineWidth = 2; g.beginPath(); g.arc(ax, ay, 9, 0, Math.PI * 2); g.stroke();
   }
   if (!pitch) return;
   const cut = ev?.swing?.contact ? ev.swing.t : Infinity;
@@ -290,33 +240,6 @@ async function animatePitch(pitch, ev) {
   const end = ev.swing?.contact ? ev.swing.t + 0.05 : pitch.flightTime + 0.1;
   await animate(end, Number($('pitchSpeed').value), (t) => drawPlate(pitch, t, ev));
 }
-
-function animatePitchHuman(pitch) {
-  return new Promise((resolve) => {
-    let ev = null;
-    let simT = 0;
-    const speed = Number($('pitchSpeed').value);
-    const batter = game.situation().batter;
-    $('prompt').innerHTML = 'Swing! <kbd>Space</kbd>';
-    humanSwingHandler = () => {
-      if (ev) return;
-      const aim = mouseAim ?? { x: 0, z: mToFt(field.zone.centerZ) };
-      ev = game.resolvePitch({ timing: simT + batter.batter.swingTime, aimFt: aim, type: $('swingType').value });
-    };
-    const t0 = performance.now();
-    const tick = () => {
-      simT = ((performance.now() - t0) / 1000) * speed;
-      drawPlate(pitch, simT, ev, ev?.swing ? null : mouseAim);
-      const end = ev?.swing?.contact ? ev.swing.t + 0.1 : pitch.flightTime + 0.25;
-      if (simT < end) return requestAnimationFrame(tick);
-      humanSwingHandler = null;
-      if (!ev) ev = game.resolvePitch('take');
-      resolve(ev);
-    };
-    requestAnimationFrame(tick);
-  });
-}
-const timingWord = (ms) => (ms == null ? '' : Math.abs(ms) < 4 ? 'on time' : ms < 0 ? `${Math.abs(ms).toFixed(0)} ms early` : `${ms.toFixed(0)} ms late`);
 
 // ---------- field view ----------
 const FS = 16.5; // px per meter
@@ -518,12 +441,7 @@ function renderCards() {
     <div class="sub">PITCHING · <span style="color:var(--${sit.fieldingSide})">${game.teams[sit.fieldingSide].name}</span></div>
     <div class="name">${p.name}</div>
     <div class="sub">Throws ${p.throws} · ${pc} pitches${tired ? ' · <b>tiring</b>' : ''} · ${Math.floor(pl.outs / 3)}.${pl.outs % 3} IP, ${pl.kPitched} K</div>
-    <div class="arsenal">${p.arsenal.map((k) => `<button data-p="${k}" class="${humanPitch.pitch === k ? 'sel' : ''}" ${humanPitching() && !busy ? '' : 'disabled'}>${PITCHES[k].name}</button>`).join('')}</div></div>`;
-  $('pitcherCard').querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
-    humanPitch.pitch = btn.dataset.p;
-    renderCards();
-    setPrompt(`${PITCHES[btn.dataset.p].name}: click the plate view to pick a target.`);
-  }));
+    <div class="arsenal">${p.arsenal.map((k) => `<span class="${lastEvent?.pitcher === p && lastEvent.pitch.pitch === PITCHES[k].name ? 'sel' : ''}">${PITCHES[k].name}</span>`).join('')}</div></div>`;
 }
 
 function renderLog() {

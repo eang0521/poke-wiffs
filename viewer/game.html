@@ -61,8 +61,8 @@
   .card .name { font-weight: 700; font-size: 15px; }
   .card .sub { font-size: 12px; color: var(--muted); }
   .arsenal { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
-  .arsenal button { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
-  .arsenal button.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .arsenal span { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; text-align: center; }
+  .arsenal span.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .prompt { font-weight: 600; color: var(--accent); min-height: 1.4em; }
   #log { max-height: 260px; overflow: auto; font-size: 13px; }
@@ -75,7 +75,6 @@
   .box th, .box td { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
   .box th:first-child, .box td:first-child { text-align: left; }
   .box img { width: 22px; height: 22px; vertical-align: middle; object-fit: contain; }
-  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -90,7 +89,7 @@
   <div class="panel start-row">
     <label>Innings <select id="innings"><option>3</option><option>5</option><option selected>6</option><option>9</option></select></label>
     <button id="start">Play ball!</button>
-    <span class="sub" style="color:var(--muted)">Human batting: aim with the mouse over the plate view, <kbd>Space</kbd> or click to swing. Human pitching: pick a pitch, then click a target.</span>
+    <span class="sub" style="color:var(--muted)">Pick two parties, then sit back and watch.</span>
   </div>
 </section>
 
@@ -112,16 +111,13 @@
       <div class="panel">
         <canvas id="plate" width="460" height="330"></canvas>
         <div class="prompt" id="prompt"></div>
-        <div class="controls" id="humanBat" style="display:none">
-          <label class="small" style="margin:0">Swing</label>
-          <select id="swingType"><option value="contact">Contact</option><option value="normal" selected>Normal</option><option value="power">Power</option></select>
-        </div>
       </div>
       <div class="panel card" id="batterCard"></div>
       <div class="panel card" id="pitcherCard"></div>
       <div class="panel">
         <div class="controls">
-          <button id="next">Next pitch</button>
+          <button id="play">▶ Play</button>
+          <button id="next" class="secondary">Next pitch</button>
           <button id="simHalf" class="secondary">Sim half-inning</button>
           <button id="simGame" class="secondary">Sim to end</button>
         </div>
@@ -129,7 +125,6 @@
         <input type="range" id="pitchSpeed" min="0.15" max="1" step="0.05" value="0.4" style="width:100%">
         <label class="small">Play replay speed <span id="playSpeedLbl"></span></label>
         <input type="range" id="playSpeed" min="0.5" max="4" step="0.25" value="1.5" style="width:100%">
-        <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="auto"> Auto-advance CPU pitches</label>
       </div>
     </div>
   </div>
