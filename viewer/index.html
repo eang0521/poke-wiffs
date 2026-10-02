@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wiffle Sim Lab</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1f2328; --muted: #6a6f76; --line: #d9d3c7;
+    --grass: #cfe3c0; --grass-dark: #a9cc96; --dirt: #e2cfae; --fence: #2f5d3a; --zone: #c0392b;
+    --accent: #2b6cb0; --ball: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --panel: #1d2127; --ink: #e8e6e1; --muted: #9aa0a8; --line: #343a42;
+      --grass: #24402c; --grass-dark: #1c3323; --dirt: #5a4a33; --fence: #8fd19e; --zone: #ff6b5b;
+      --accent: #6aa8ff; --ball: #f5f5f5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { padding: 14px 16px 4px; }
+  h1 { font-size: 18px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 14px; padding: 12px 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .controls label { display: block; margin: 8px 0 3px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  select, input[type=number] { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+  input[type=range] { width: 100%; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button { margin-top: 10px; width: 100%; padding: 8px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .views { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .views .wide { grid-column: 1 / -1; }
+  @media (max-width: 700px) { .views { grid-template-columns: 1fr; } }
+  canvas { width: 100%; display: block; border-radius: 6px; }
+  .cap { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .blurb { color: var(--muted); font-size: 12px; margin-top: 6px; min-height: 3em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  td:last-child { text-align: right; font-weight: 600; }
+  .stats6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 6px; }
+  .stats6 label { margin: 0 0 2px; font-size: 10px; text-align: center; }
+  .stats6 input { padding: 4px 2px; text-align: center; font-size: 12px; }
+  .derived { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .derived b { color: var(--ink); font-weight: 600; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+  .check { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--ink); text-transform: none; font-size: 13px; letter-spacing: 0; }
+  h2 { font-size: 13px; margin: 16px 0 4px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Wiffle Sim Lab <a href="./game.html" style="font-size:13px;font-weight:500;color:var(--accent)">Play a game →</a></h1>
+  <p>Physics sandbox for the Pokémon wiffle ball game. Click the catcher's view to set the pitch target.
+     <b>Live at-bat:</b> aim the bat with the mouse over the catcher's view and press <kbd>Space</kbd> to swing.</p>
+</header>
+<main>
+  <section class="panel controls">
+    <h2 style="margin-top:0">Pitch</h2>
+    <label for="pitch">Type</label>
+    <select id="pitch"></select>
+    <div class="blurb" id="blurb"></div>
+    <label for="pmon">Pitcher Pokémon</label>
+    <select id="pmon"></select>
+    <div class="stats6" id="pstats"></div>
+    <div class="derived" id="pderived"></div>
+    <div class="row">
+      <div><label for="hand">Throws</label><select id="hand"><option value="R">Right</option><option value="L">Left</option></select></div>
+      <div><label for="speed">Speed override</label><input id="speed" type="number" min="30" max="95" step="1" placeholder="from stats"></div>
+      <div><label for="pcount">Pitch #</label><input id="pcount" type="number" min="0" value="0"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="execution" checked> Execution error + wake buffet</label>
+    <label for="slowmo">Replay speed <span id="slowmoVal"></span></label>
+    <input id="slowmo" type="range" min="0.05" max="1" step="0.05" value="0.25">
+    <button id="throw">Throw pitch</button>
+    <button id="arsenal" class="secondary">Show whole arsenal</button>
+
+    <h2>Batting</h2>
+    <label for="bmon">Batter Pokémon</label>
+    <select id="bmon"></select>
+    <div class="stats6" id="bstats"></div>
+    <div class="derived" id="bderived"></div>
+    <div class="row">
+      <div><label for="bhand">Bats</label><select id="bhand"><option value="R">Right</option><option value="L">Left</option></select></div>
+      <div><label for="stype">Swing</label><select id="stype"><option value="contact">Contact</option><option value="normal" selected>Normal</option><option value="power">Power</option></select></div>
+    </div>
+    <button id="live">Live at-bat (Space to swing)</button>
+    <div class="row">
+      <div><label for="offt">Timing ms (+late)</label><input id="offt" type="number" value="0" step="2"></div>
+      <div><label for="offz">Bat under ball (in)</label><input id="offz" type="number" value="0.5" step="0.25"></div>
+    </div>
+    <button id="auto" class="secondary">Auto-swing at last pitch</button>
+
+    <h2>Batted ball (manual launch)</h2>
+    <div class="row">
+      <div><label for="ev">Exit velo</label><input id="ev" type="number" value="75" min="10" max="110"></div>
+      <div><label for="la">Launch°</label><input id="la" type="number" value="25" min="-30" max="85"></div>
+      <div><label for="spray">Spray°</label><input id="spray" type="number" value="0" min="-80" max="80"></div>
+    </div>
+    <button id="hit">Hit ball</button>
+    <button id="spray20" class="secondary">Spray chart (40 random)</button>
+
+    <h2>Result</h2>
+    <table id="stats"></table>
+  </section>
+
+  <section class="views">
+    <div class="panel">
+      <p class="cap">Catcher's view (strike zone frame)</p>
+      <canvas id="catcher" width="520" height="440"></canvas>
+    </div>
+    <div class="panel">
+      <p class="cap">Side view (pitcher → zone)</p>
+      <canvas id="side" width="520" height="440"></canvas>
+    </div>
+    <div class="panel wide">
+      <p class="cap">Field (top-down) — 45/40/40/45 basepaths, 75° foul lines, 5-panel 100 ft fence</p>
+      <canvas id="field" width="1060" height="640"></canvas>
+    </div>
+  </section>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

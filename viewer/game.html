@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poké Wiffs</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1f2328; --muted: #6a6f76; --line: #d9d3c7;
+    --grass: #cfe3c0; --grass2: #c3dbb2; --dirt: #e2cfae; --fence: #2f5d3a; --zone: #c0392b;
+    --accent: #2b6cb0; --away: #d1495b; --home: #2b6cb0; --ball: #ffffff; --gold: #e0a100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --panel: #1d2127; --ink: #e8e6e1; --muted: #9aa0a8; --line: #343a42;
+      --grass: #24402c; --grass2: #213a28; --dirt: #5a4a33; --fence: #8fd19e; --zone: #ff6b5b;
+      --accent: #6aa8ff; --away: #ff7b8a; --home: #6aa8ff; --ball: #f5f5f5; --gold: #ffcc4d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px 0; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  header a { color: var(--accent); font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  button { padding: 7px 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  select, input { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+  label.small { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 3px; }
+
+  /* setup */
+  #setup { padding: 12px 16px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { #setup { grid-template-columns: 1fr; } }
+  .team-edit h2 { margin: 0 0 6px; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+  .slot { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+  .slot img { width: 44px; height: 44px; object-fit: contain; }
+  .slot input { width: 100%; }
+  .slot .meta { font-size: 11px; color: var(--muted); grid-column: 2; margin-top: -4px; }
+  .team-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .start-row { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  /* game */
+  #gameview { display: none; padding: 12px 16px 24px; }
+  .top { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: stretch; }
+  @media (max-width: 860px) { .top { grid-template-columns: 1fr; } }
+  table.line { border-collapse: collapse; font-variant-numeric: tabular-nums; width: 100%; }
+  table.line th, table.line td { padding: 3px 7px; text-align: center; border-bottom: 1px solid var(--line); }
+  table.line td:first-child, table.line th:first-child { text-align: left; font-weight: 600; }
+  table.line .rhe { font-weight: 700; }
+  .sit { display: flex; gap: 18px; align-items: center; }
+  .count { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; }
+  .dots span { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--muted); margin-right: 3px; }
+  .dots span.on { background: var(--gold); border-color: var(--gold); }
+  .main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+  @media (max-width: 960px) { .main { grid-template-columns: 1fr; } }
+  canvas { width: 100%; display: block; border-radius: 8px; }
+  .side { display: grid; gap: 14px; align-content: start; }
+  .card { display: grid; grid-template-columns: 72px 1fr; gap: 10px; align-items: center; }
+  .card img { width: 72px; height: 72px; object-fit: contain; }
+  .card .name { font-weight: 700; font-size: 15px; }
+  .card .sub { font-size: 12px; color: var(--muted); }
+  .arsenal { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .arsenal button { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+  .arsenal button.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .prompt { font-weight: 600; color: var(--accent); min-height: 1.4em; }
+  #log { max-height: 260px; overflow: auto; font-size: 13px; }
+  #log div { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  #log .half { font-weight: 700; color: var(--muted); }
+  #log .big { font-weight: 700; }
+  .box { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 860px) { .box { grid-template-columns: 1fr; } }
+  .box table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .box th, .box td { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  .box th:first-child, .box td:first-child { text-align: left; }
+  .box img { width: 22px; height: 22px; vertical-align: middle; object-fit: contain; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚾ Poké Wiffs</h1>
+  <a href="./index.html">Physics lab →</a>
+</header>
+
+<section id="setup">
+  <div class="panel team-edit" id="edit-away"></div>
+  <div class="panel team-edit" id="edit-home"></div>
+  <div class="panel start-row">
+    <label>Innings <select id="innings"><option>3</option><option>5</option><option selected>6</option><option>9</option></select></label>
+    <button id="start">Play ball!</button>
+    <span class="sub" style="color:var(--muted)">Human batting: aim with the mouse over the plate view, <kbd>Space</kbd> or click to swing. Human pitching: pick a pitch, then click a target.</span>
+  </div>
+</section>
+
+<section id="gameview">
+  <div class="top">
+    <div class="panel"><table class="line" id="linescore"></table></div>
+    <div class="panel sit">
+      <div><div class="sub" style="color:var(--muted)" id="inningLbl"></div><div class="count" id="countLbl"></div></div>
+      <div><div class="sub" style="color:var(--muted)">Outs</div><div class="dots" id="outsLbl"></div></div>
+      <canvas id="diamond" width="90" height="70" style="width:90px"></canvas>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <canvas id="field" width="900" height="620"></canvas>
+    </div>
+    <div class="side">
+      <div class="panel">
+        <canvas id="plate" width="460" height="330"></canvas>
+        <div class="prompt" id="prompt"></div>
+        <div class="controls" id="humanBat" style="display:none">
+          <label class="small" style="margin:0">Swing</label>
+          <select id="swingType"><option value="contact">Contact</option><option value="normal" selected>Normal</option><option value="power">Power</option></select>
+        </div>
+      </div>
+      <div class="panel card" id="batterCard"></div>
+      <div class="panel card" id="pitcherCard"></div>
+      <div class="panel">
+        <div class="controls">
+          <button id="next">Next pitch</button>
+          <button id="simHalf" class="secondary">Sim half-inning</button>
+          <button id="simGame" class="secondary">Sim to end</button>
+        </div>
+        <label class="small">Pitch replay speed <span id="pitchSpeedLbl"></span></label>
+        <input type="range" id="pitchSpeed" min="0.15" max="1" step="0.05" value="0.4" style="width:100%">
+        <label class="small">Play replay speed <span id="playSpeedLbl"></span></label>
+        <input type="range" id="playSpeed" min="0.5" max="4" step="0.25" value="1.5" style="width:100%">
+        <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="auto"> Auto-advance CPU pitches</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px"><div id="log"></div></div>
+  <div class="box" id="box"></div>
+</section>
+
+<script type="module" src="./game.js"></script>
+</body>
+</html>
