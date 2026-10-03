@@ -94,48 +94,64 @@ export function createPlayer(mon, opts = {}) {
   };
 }
 
-export const POSITIONS = ['P', '1B', 'MI', '3B', 'LF', 'RF'];
-export const POSITION_NAMES = { P: 'Pitcher', '1B': 'First base', MI: 'Middle infield', '3B': 'Third base', LF: 'Left field', RF: 'Right field' };
+export const POSITIONS = ['P', '1B', 'SS', 'OF'];
+export const POSITION_NAMES = { P: 'Pitcher', '1B': 'First base', SS: 'Shortstop', OF: 'Outfield', DH: 'Designated hitter' };
+
+/** Roles that bat: with a DH, the DH hits instead of the pitcher. */
+export const battingRoles = (dh) => (dh ? ['1B', 'SS', 'OF', 'DH'] : ['P', '1B', 'SS', 'OF']);
+
+// Rough values used to fill positions and the batting order.
+export const pitchingValue = (p) => p.pitcher.staminaPitches / 90 + statRating(p.stats.spAttack) * 0.5 + statRating(p.stats.attack) * 0.5 + statRating(p.stats.spDefense) * 0.4;
+export const battingValue = (p) => (p.batter.batSpeedMph - 38) / 25 + p.batter.contact * 0.6 + p.batter.eye * 0.4 + statRating(p.stats.speed) * 0.2;
+export const fieldingValue = (p) => p.fielder.rating + statRating(p.stats.speed) * 0.5;
+
+/** Batting order: table-setter first, the two best power bats 2-3, then the rest. */
+export function orderLineup(players, batters) {
+  const power = (i) => players[i].batter.batSpeedMph;
+  const onBase = (i) => players[i].batter.contact + players[i].batter.eye + statRating(players[i].stats.speed) * 0.5;
+  const byPower = [...batters].sort((a, b) => power(b) - power(a));
+  const leadoff = batters.filter((i) => i !== byPower[0] && i !== byPower[1]).sort((a, b) => onBase(b) - onBase(a))[0];
+  const rest = batters.filter((i) => i !== leadoff && i !== byPower[0] && i !== byPower[1]);
+  return [leadoff, byPower[1], byPower[0], ...rest].filter((i) => i !== undefined);
+}
 
 /**
- * Build a team. Positions default to: the chosen pitcher (or the best pitcher by
- * stamina + stuff), the two fastest remaining players in the outfield, the best
- * glove at middle infield, then 3B and 1B.
+ * Default alignment for a party of six with 4 on the field (P, 1B, SS, OF),
+ * plus a DH if the rule is on. Everyone else starts on the bench.
+ *   P:  best pitcher (or opts.pitcher)   OF: fastest
+ *   SS: best glove                       1B: best remaining bat
+ *   DH: best remaining bat
+ */
+export function defaultAlignment(players, { dh = true, pitcher } = {}) {
+  const left = new Set(players.map((_, i) => i));
+  const take = (score) => {
+    const best = [...left].sort((a, b) => score(players[b]) - score(players[a]))[0];
+    left.delete(best);
+    return best;
+  };
+  const positions = {};
+  positions.P = pitcher ?? take(pitchingValue);
+  left.delete(positions.P);
+  positions.OF = take((p) => p.fielder.runSpeed);
+  positions.SS = take((p) => p.fielder.rating);
+  positions['1B'] = take(battingValue);
+  if (dh) positions.DH = take(battingValue);
+  const lineup = orderLineup(players, battingRoles(dh).map((r) => positions[r]));
+  return { positions, lineup, bench: [...left] };
+}
+
+/**
+ * Build a team: a party of six Pokémon.
  * @param {string} name
  * @param {(string|object)[]} roster  6 Pokémon (slugs or player objects)
- * @param {object} [opts] {pitcher: index, positions: {P: i, ...}, lineup: [i...]}
+ * @param {object} [opts] {dh = true, pitcher: index, positions: {P, 1B, SS, OF, DH?}, lineup: [i...]}
  */
 export function createTeam(name, roster, opts = {}) {
   if (roster.length !== 6) throw new Error('A team needs exactly 6 Pokémon');
   const players = roster.map((r, i) => (typeof r === 'string' ? createPlayer(r, { uid: i }) : r));
-  let positions = opts.positions;
-  if (!positions) {
-    const left = new Set(players.map((_, i) => i));
-    const take = (score) => {
-      const best = [...left].sort((a, b) => score(players[b]) - score(players[a]))[0];
-      left.delete(best);
-      return best;
-    };
-    positions = {};
-    positions.P = opts.pitcher ?? take((p) => p.pitcher.staminaPitches / 90 + statRating(p.stats.spAttack) * 0.5 + statRating(p.stats.attack) * 0.5 + statRating(p.stats.spDefense) * 0.4);
-    left.delete(positions.P);
-    const lf = take((p) => p.fielder.runSpeed);
-    const rf = take((p) => p.fielder.runSpeed);
-    positions.LF = lf;
-    positions.RF = rf;
-    positions.MI = take((p) => p.fielder.rating);
-    positions['3B'] = take((p) => p.fielder.throwSpeed);
-    positions['1B'] = take(() => 0);
-  }
-  // Lineup: by default, best on-base types first and power in the middle.
-  const lineup = opts.lineup ?? (() => {
-    const power = (p) => p.batter.batSpeedMph;
-    const contact = (p) => p.batter.contact + p.batter.eye + statRating(p.stats.speed) * 0.5;
-    const order = [...players.keys()];
-    const byPower = [...order].sort((a, b) => power(players[b]) - power(players[a]));
-    const cleanup = byPower.slice(0, 3);
-    const rest = order.filter((i) => !cleanup.includes(i)).sort((a, b) => contact(players[b]) - contact(players[a]));
-    return [rest[0], cleanup[1], cleanup[0], cleanup[2], rest[1], rest[2]];
-  })();
-  return { name, players, positions, lineup };
+  const dh = opts.dh ?? true;
+  const auto = defaultAlignment(players, { dh, pitcher: opts.pitcher });
+  const positions = opts.positions ?? auto.positions;
+  const lineup = opts.lineup ?? (opts.positions ? orderLineup(players, battingRoles(dh).map((r) => positions[r])) : auto.lineup);
+  return { name, players, positions, lineup, dh };
 }

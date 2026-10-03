@@ -24,10 +24,11 @@ node tools/build-pokedex.mjs # refresh src/data/pokedex.js from pokemondb.net
 | `src/stats/stats.js` | Pokémon stats → wiffle stats. One data table each for batters and pitchers. |
 | `src/batting/battedBall.js` | Batted-ball flight → home run / off the wall / fair / foul, with bounces and rolling. |
 | `src/data/pokedex.js` | All 1,025 species (default forms): name, types, base stats; HOME sprite URLs (hotlinked from pokemondb.net). |
-| `src/game/roster.js` | Players (stats → batter/pitcher/fielder profiles, 4-pitch arsenal by type + stats, handedness) and 6-Pokémon teams. |
+| `src/game/roster.js` | Players (stats → batter/pitcher/fielder profiles, 4-pitch arsenal by type + stats, handedness), 6-Pokémon parties, default positions and batting order. |
+| `src/game/types.js` | Type chart and matchups: each side attacks with its best type; effectiveness scales matchup stats. |
 | `src/game/fielding.js` | Batted ball → play: catches/dives, ground balls, wiffle-slow throws, runner decisions, force/tag plays, DPs, tag-ups, errors. |
 | `src/game/ai.js` | CPU pitch selection by count; CPU batter reads (Eye), swing decisions and input errors. |
-| `src/game/game.js` | Game engine: counts, outs, innings, walk-offs, pitching changes, fatigue, box score, play-by-play. |
+| `src/game/game.js` | Game engine: counts, outs, innings, walk-offs, substitutions (`changeRoles`), CPU managers (relievers, pinch hitters), fatigue, box score, play-by-play. |
 | `viewer/game.html` | The game (watch mode): team builder, scoreboard, sprites on the field, animated plays, play/pause and sim controls. The engine already accepts human pitch and swing input; the UI for it comes later. |
 | `viewer/index.html` | Physics lab: catcher view, side view, top-down field, live at-bats. |
 
@@ -82,5 +83,24 @@ const swing = swingAtPitch({ pitch, field, batter, timing, aimFt });
 ## Game rules (defaults, see `DEFAULT_RULES`)
 
 Six innings, extra innings until someone leads (a tie after 15). 4 balls is a walk, 3 strikes is a strikeout. With no catcher
-behind the frame, a foul tip is just a foul. There's no stealing or leading off. Teams are 6 Pokémon: a pitcher, 1B, middle infield, 3B, LF and RF.
-The CPU changes pitchers once the starter is 12 pitches past their stamina.
+behind the frame, a foul tip is just a foul. There's no stealing or leading off.
+
+**Teams.** A party of 6 Pokémon, with 4 on the field: Pitcher, 1B, SS and OF. With the DH rule (on by default) a fifth player
+bats instead of the pitcher, so the batting order is always 4. Everyone else waits on the bench.
+
+**Substitutions** are free-form. Anyone can come in to pitch, from the bench or from another position. A relieved pitcher can stay
+in the game at DH or in the field and keep their batting spot. Batting spots follow the players: whoever takes over a departing
+player's role inherits his spot. Bench players can come back in later. The only limit is that a relieved pitcher can't return to the mound.
+
+**Type matchups.** Each plate appearance, the pitcher attacks with whichever of his types is most effective against the batter, and
+the batter does the same against the pitcher. Effectiveness scales Attack, Sp. Atk, Sp. Def and Speed for that plate appearance:
+
+| Effectiveness | ×4 | ×2 | ×1 | ×½ | ×¼ | no effect |
+|---|---|---|---|---|---|---|
+| Stats | +45% | +30% | — | −20% | −30% | −35% |
+
+**CPU managers** use matchups:
+- They change pitchers when the starter is 12 pitches past his stamina. Past half his stamina, they also make a change when a fresh arm matches up much better against the next three hitters.
+- They send up a pinch hitter from the bench when he's clearly better against the current pitcher (they never pinch-hit for the pitcher).
+
+Fielders play a default alignment (deep 1B, SS shaded behind second, one deep OF). It was found by searching layouts against simulated batted balls.

@@ -1,6 +1,6 @@
 import {
   createField, createTeam, createPlayer, createGame, POKEDEX, getPokemon, spriteUrl, PITCHES,
-  batPose, mToFt, createRng,
+  batPose, mToFt, createRng, effectivenessLabel,
 } from '../src/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,7 +49,7 @@ function renderSetup(side) {
   el.innerHTML = `
     <h2><span style="color:var(--${side})">●</span> ${side === 'away' ? 'Away' : 'Home'}</h2>
     <label class="small">Team name</label><input class="tname" value="${t.name}" style="width:100%">
-    <label class="small">Party (batting order is set automatically)</label>
+    <label class="small">Party: 4 take the field (P, 1B, SS, OF), plus a DH if on; the rest start on the bench</label>
     ${t.roster.map((slug, i) => {
       const m = getPokemon(slug);
       const pl = m ? createPlayer(m) : null;
@@ -93,9 +93,10 @@ function resetGame() {
 function startGame() {
   for (const side of SIDES) if (new Set(setup[side].roster).size !== 6) return alert(`${setup[side].name}: pick 6 different Pokémon`);
   resetGame();
-  const away = createTeam(setup.away.name, setup.away.roster.map((s, i) => createPlayer(s, { uid: `a${i}` })));
-  const home = createTeam(setup.home.name, setup.home.roster.map((s, i) => createPlayer(s, { uid: `h${i}` })));
-  game = createGame({ away, home, field, rules: { innings: Number($('innings').value) }, seed: Math.floor(Math.random() * 1e9) });
+  const dh = $('dh').checked;
+  const away = createTeam(setup.away.name, setup.away.roster.map((s, i) => createPlayer(s, { uid: `a${i}` })), { dh });
+  const home = createTeam(setup.home.name, setup.home.roster.map((s, i) => createPlayer(s, { uid: `h${i}` })), { dh });
+  game = createGame({ away, home, field, rules: { innings: Number($('innings').value), dh }, seed: Math.floor(Math.random() * 1e9) });
   for (const t of [away, home]) t.players.forEach((p) => sprite(p.slug));
   for (const id of ['play', 'next', 'simHalf', 'simGame']) $(id).disabled = false;
   $('setup').style.display = 'none';
@@ -458,17 +459,20 @@ function renderCards() {
   const b = sit.batter;
   const p = sit.pitcher;
   const fat = sit.batterFatigue.tired ? ' · <b>tired</b>' : '';
+  const m = sit.matchup;
   $('batterCard').innerHTML = `<img src="${b.sprite}" alt=""><div>
     <div class="sub">AT BAT · <span style="color:var(--${sit.battingSide})">${game.teams[sit.battingSide].name}</span></div>
-    <div class="name">${b.name}</div>
-    <div class="sub">Bats ${b.bats} · ${b.types.join('/')} · today ${statLine(b)}${fat}</div>
+    <div class="name">${b.name} ${typeChips(b.types)}</div>
+    ${matchupLine(m.batter, p)}
+    <div class="sub">Bats ${b.bats} · today ${statLine(b)}${fat}</div>
     <div class="sub">Bat ${b.batter.batSpeedMph.toFixed(0)} mph · contact ${b.batter.contact.toFixed(2)} · eye ${b.batter.eye.toFixed(2)} · speed ${mToFt(b.batter.runSpeed).toFixed(0)} ft/s</div></div>`;
   const pc = sit.pitchCount;
   const tired = pc > p.pitcher.staminaPitches;
   const pl = game.state.box.get(p.id);
   $('pitcherCard').innerHTML = `<img src="${p.sprite}" alt=""><div>
     <div class="sub">PITCHING · <span style="color:var(--${sit.fieldingSide})">${game.teams[sit.fieldingSide].name}</span></div>
-    <div class="name">${p.name}</div>
+    <div class="name">${p.name} ${typeChips(p.types)}</div>
+    ${matchupLine(m.pitcher, b)}
     <div class="sub">Throws ${p.throws} · ${pc} pitches${tired ? ' · <b>tiring</b>' : ''} · ${Math.floor(pl.outs / 3)}.${pl.outs % 3} IP, ${pl.kPitched} K</div>
     <div class="arsenal">${p.arsenal.map((k) => `<span class="${lastEvent?.pitcher === p && lastEvent.pitch.pitch === PITCHES[k].name ? 'sel' : ''}">${PITCHES[k].name}</span>`).join('')}</div></div>`;
 }
@@ -476,7 +480,7 @@ function renderCards() {
 function renderLog() {
   const items = game.state.log.slice(-80).reverse();
   $('log').innerHTML = items.map((e) => {
-    const cls = e.type === 'half' || e.type === 'final' ? 'half' : e.type === 'in_play' || e.type === 'walk' || e.type === 'strikeout' ? 'big' : '';
+    const cls = e.type === 'half' || e.type === 'final' ? 'half' : e.type === 'change' ? 'sub' : e.type === 'in_play' || e.type === 'walk' || e.type === 'strikeout' ? 'big' : '';
     return `<div class="${cls}">${e.text}</div>`;
   }).join('');
 }
@@ -485,11 +489,13 @@ function renderBox() {
   const s = game.summary();
   $('box').innerHTML = SIDES.map((side) => {
     const team = game.teams[side];
-    const posOf = (i) => Object.entries(game.state.positions[side]).find(([, idx]) => idx === i)?.[0] ?? '';
-    const bat = team.lineup.map((i) => {
+    const posOf = (i) => Object.entries(game.state.positions[side]).find(([, idx]) => idx === i)?.[0] ?? 'Bench';
+    const order = game.state.lineup[side];
+    const rows = [...order, ...team.players.map((_, i) => i).filter((i) => !order.includes(i))];
+    const bat = rows.map((i) => {
       const p = team.players[i];
       const l = game.state.box.get(p.id);
-      return `<tr><td><img src="${p.sprite}" alt=""> ${p.name}</td><td>${posOf(i)}</td><td>${l.ab}</td><td>${l.r}</td><td>${l.h}</td><td>${l.hr}</td><td>${l.rbi}</td><td>${l.bb}</td><td>${l.k}</td><td>${l.e}</td></tr>`;
+      return `<tr style="${order.includes(i) ? '' : 'color:var(--muted)'}"><td><img src="${p.sprite}" alt=""> ${p.name}</td><td>${posOf(i)}</td><td>${l.ab}</td><td>${l.r}</td><td>${l.h}</td><td>${l.hr}</td><td>${l.rbi}</td><td>${l.bb}</td><td>${l.k}</td><td>${l.e}</td></tr>`;
     }).join('');
     const pit = team.players.filter((p) => game.state.box.get(p.id).pitches > 0).map((p) => {
       const l = game.state.box.get(p.id);
@@ -499,6 +505,22 @@ function renderBox() {
       <table><tr><th>Batting</th><th>Pos</th><th>AB</th><th>R</th><th>H</th><th>HR</th><th>RBI</th><th>BB</th><th>K</th><th>E</th></tr>${bat}</table>
       <table style="margin-top:8px"><tr><th>Pitching</th><th>IP</th><th>H</th><th>R</th><th>BB</th><th>K</th><th>HR</th><th>P</th></tr>${pit}</table></div>`;
   }).join('');
+}
+
+// ---------- types ----------
+const TYPE_COLORS = {
+  normal: '#9fa19f', fire: '#e62829', water: '#2980ef', electric: '#fac000', grass: '#3fa129', ice: '#3dcef3',
+  fighting: '#ff8000', poison: '#9141cb', ground: '#915121', flying: '#81b9ef', psychic: '#ef4179', bug: '#91a119',
+  rock: '#afa981', ghost: '#704170', dragon: '#5060e1', dark: '#624d4e', steel: '#60a1b8', fairy: '#ef70ef',
+};
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+const typeChips = (types) => types.map((t) => `<span class="type" style="background:${TYPE_COLORS[t] ?? '#888'}">${cap(t)}</span>`).join('');
+
+function matchupLine(side, opponent) {
+  const label = effectivenessLabel(side.multiplier);
+  const cls = side.multiplier >= 2 ? 'se' : side.multiplier < 1 ? 'nve' : 'neutral';
+  const pct = Math.round((side.factor - 1) * 100);
+  return `<div class="matchup ${cls}">${cap(side.type)} vs ${opponent.name}: ×${side.multiplier}${label === 'neutral' ? '' : ` — ${label}!`}${pct ? ` (stats ${pct > 0 ? '+' : ''}${pct}%)` : ''}</div>`;
 }
 
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => game && renderAll());

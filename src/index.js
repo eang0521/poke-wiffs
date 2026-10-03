@@ -12,7 +12,8 @@ export { swingAtPitch, createSwing, batPose, findContact, idealContact, ballStat
 export { batterFromStats, pitcherFromStats, pitcherFatigue, statRating, BATTER_CONVERSION, PITCHER_CONVERSION, STAT_KEYS, STAT_LABELS, SAMPLE_POKEMON } from './stats/stats.js';
 export { POKEDEX, getPokemon, spriteUrl } from './data/pokedex.js';
 export { fielderFromStats, batterFatigue } from './stats/stats.js';
-export { createPlayer, createTeam, defaultArsenal, POSITIONS, POSITION_NAMES } from './game/roster.js';
+export { createPlayer, createTeam, defaultArsenal, defaultAlignment, battingRoles, POSITIONS, POSITION_NAMES } from './game/roster.js';
+export { matchup, effectiveness, bestAttack, statFactor, boostStats, effectivenessLabel, TYPES } from './game/types.js';
 export { resolvePlay, throwTime, DEFAULT_ALIGNMENT, REACH } from './game/fielding.js';
 export { cpuPitchChoice, cpuSwingDecision } from './game/ai.js';
 export { createGame, DEFAULT_RULES } from './game/game.js';

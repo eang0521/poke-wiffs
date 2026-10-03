@@ -30,14 +30,14 @@ const CUSHION = 0.15; // s margin a runner wants before trying for an extra base
 const ACCEL = 0.6; // s for a fielder to reach top speed (uniform acceleration)
 const READ = 0.3; // s extra to read a ball in the air before committing
 
-// Default positions (feet), tuned for the 45/40/40/45 diamond.
+// Default positions (feet) for the four fielders. Found by searching layouts
+// against ~800 simulated batted balls for the fewest hits: a deep first
+// baseman, the shortstop shaded behind second, one deep outfielder.
 export const DEFAULT_ALIGNMENT = Object.freeze({
   P: [0, 34],
-  '1B': [21, 46],
-  MI: [-4, 55],
-  '3B': [-21, 46],
-  LF: [-30, 80],
-  RF: [30, 80],
+  '1B': [26, 54],
+  SS: [7, 53],
+  OF: [2, 86],
 });
 
 const dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);

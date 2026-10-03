@@ -86,8 +86,8 @@ export function cpuSwingDecision({ pitch, batter, count, field, rng }) {
 
   const ideal = idealContact(pitch, batter);
   if (!ideal) return { swing: true, timing: pitch.flightTime, aimFt: { x: 0, z: 2 }, type: 'normal' };
-  const timingSigma = lerp(26, 10, eye) * quickness * Math.sqrt(deception) / 1000;
-  const aimSigma = inToM(lerp(2.2, 0.8, eye) * deception);
+  const timingSigma = lerp(34, 14, eye) * quickness * Math.sqrt(deception) / 1000;
+  const aimSigma = inToM(lerp(2.8, 1.1, eye) * deception);
   const type = count.strikes === 2 ? 'contact' : count.balls - count.strikes >= 2 ? 'power' : 'normal';
   // Power hitters aim a touch under the ball to lift it; others try to square it up.
   const loft = inToM(statRating(batter.stats?.attack ?? 80) > 0.6 ? 0.3 : 0.1);

@@ -69,6 +69,12 @@
   #log div { padding: 3px 0; border-bottom: 1px solid var(--line); }
   #log .half { font-weight: 700; color: var(--muted); }
   #log .big { font-weight: 700; }
+  #log .sub { color: var(--accent); font-style: italic; }
+  .type { display: inline-block; padding: 0 6px; border-radius: 4px; color: #fff; font-size: 11px; font-weight: 600; margin-right: 3px; vertical-align: middle; text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+  .matchup { font-size: 12px; font-weight: 600; margin: 2px 0; }
+  .matchup.se { color: #1f9d55; }
+  .matchup.nve { color: #d64545; }
+  .matchup.neutral { color: var(--muted); font-weight: 500; }
   .box { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
   @media (max-width: 860px) { .box { grid-template-columns: 1fr; } }
   .box table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -88,8 +94,9 @@
   <div class="panel team-edit" id="edit-home"></div>
   <div class="panel start-row">
     <label>Innings <select id="innings"><option>3</option><option>5</option><option selected>6</option><option>9</option></select></label>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="dh" checked> Designated hitter</label>
     <button id="start">Play ball!</button>
-    <span class="sub" style="color:var(--muted)">Pick two parties, then sit back and watch.</span>
+    <span class="sub" style="color:var(--muted)">Pick two parties, then sit back and watch. Type matchups matter: managers bring in relievers and pinch hitters who match up well.</span>
   </div>
 </section>
 
