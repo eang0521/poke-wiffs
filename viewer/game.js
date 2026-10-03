@@ -78,17 +78,40 @@ let game = null;
 let busy = false; // a pitch or play is animating
 let playing = false; // auto-advance pitch after pitch
 let lastEvent = null;
+let gen = 0; // bumped on every new game so stale animations and timers stop
 
-$('start').addEventListener('click', () => {
+// Drop the current game: stop autoplay and any queued sim; in-flight animations see the new gen and quit.
+function resetGame() {
+  gen++;
+  playing = false;
+  busy = false;
+  queuedSim = null;
+  lastEvent = null;
+  game = null;
+}
+
+function startGame() {
   for (const side of SIDES) if (new Set(setup[side].roster).size !== 6) return alert(`${setup[side].name}: pick 6 different Pokémon`);
+  resetGame();
   const away = createTeam(setup.away.name, setup.away.roster.map((s, i) => createPlayer(s, { uid: `a${i}` })));
   const home = createTeam(setup.home.name, setup.home.roster.map((s, i) => createPlayer(s, { uid: `h${i}` })));
   game = createGame({ away, home, field, rules: { innings: Number($('innings').value) }, seed: Math.floor(Math.random() * 1e9) });
   for (const t of [away, home]) t.players.forEach((p) => sprite(p.slug));
+  for (const id of ['play', 'next', 'simHalf', 'simGame']) $(id).disabled = false;
   $('setup').style.display = 'none';
   $('gameview').style.display = 'block';
   renderAll();
   setPlaying(true);
+}
+
+$('start').addEventListener('click', startGame);
+$('rematch').addEventListener('click', startGame);
+$('newGame').addEventListener('click', () => {
+  resetGame();
+  $('gameview').style.display = 'none';
+  $('setup').style.display = '';
+  SIDES.forEach(renderSetup);
+  scrollTo(0, 0);
 });
 
 // ---------- controls ----------
@@ -140,20 +163,24 @@ function prepareTurn() {
   $('prompt').textContent = lastEvent ? lastEvent.text : '';
   renderCards();
   drawIdle();
-  if (playing) setTimeout(() => { if (playing && !busy) runPitch(); }, 450 / Number($('playSpeed').value));
+  const g = gen;
+  if (playing) setTimeout(() => { if (g === gen && playing && !busy) runPitch(); }, 450 / Number($('playSpeed').value));
 }
 
 // ---------- one pitch ----------
 async function runPitch() {
   if (busy || game.state.over) return;
   busy = true;
+  const g = gen;
   const before = game.situation();
   const pitch = game.preparePitch();
   const ev = game.resolvePitch();
   await animatePitch(pitch, ev);
+  if (g !== gen) return; // a new game started mid-animation
   lastEvent = ev;
   $('prompt').textContent = ev.text;
   if (ev.play?.timeline && ev.play.timeline.end > 0) await animatePlay(ev, before);
+  if (g !== gen) return;
   busy = false;
   if (queuedSim) {
     const stop = queuedSim;
@@ -224,9 +251,11 @@ function drawPlate(pitch = null, t = null, ev = null) {
 }
 
 function animate(duration, speed, frame) {
+  const g = gen;
   return new Promise((resolve) => {
     const t0 = performance.now();
     const tick = () => {
+      if (g !== gen) return resolve();
       const t = ((performance.now() - t0) / 1000) * speed;
       frame(Math.min(t, duration));
       if (t < duration) requestAnimationFrame(tick);
